@@ -1,9 +1,12 @@
 import os
+import threading
+from flask import Flask, request
 import telebot
 
-TOKEN = os.getenv("8654669792:AAHnypyuxuiu8JQ5HI8RL8tix7VizBqn5JQ")
+TOKEN = os.environ["8654669792:AAHnypyuxuiu8JQ5HI8RL8tix7VizBqn5JQ"]
 
 bot = telebot.TeleBot(TOKEN)
+app = Flask(__name__)
 
 user_files = {}
 
@@ -13,8 +16,8 @@ def start(message):
     bot.reply_to(
         message,
         "👋 Welcome!\n\n"
-        "Mujhe koi file/document bhejo.\n"
-        "Main tumse naya filename puchunga."
+        "Mujhe koi document/file bhejo.\n"
+        "Uske baad naya filename bhejna."
     )
 
 
@@ -35,7 +38,9 @@ def receive_file(message):
     )
 
 
-@bot.message_handler(func=lambda message: message.from_user.id in user_files)
+@bot.message_handler(
+    func=lambda message: message.from_user.id in user_files
+)
 def rename_file(message):
     user_id = message.from_user.id
     new_name = message.text.strip()
@@ -44,37 +49,66 @@ def rename_file(message):
         bot.reply_to(message, "❌ Filename empty nahi ho sakta.")
         return
 
+    # Safe filename
+    new_name = os.path.basename(new_name)
+
+    if not new_name:
+        bot.reply_to(message, "❌ Invalid filename.")
+        return
+
     file_info = user_files[user_id]
+    temp_file = f"/tmp/{user_id}_{new_name}"
 
     try:
-        msg = bot.reply_to(message, "⏳ File download ho rahi hai...")
+        bot.send_message(message.chat.id, "⏳ Processing...")
 
         file_data = bot.get_file(file_info["file_id"])
         downloaded_file = bot.download_file(file_data.file_path)
 
-        with open(new_name, "wb") as f:
+        with open(temp_file, "wb") as f:
             f.write(downloaded_file)
 
-        bot.edit_message_text(
-            "📤 File upload ho rahi hai...",
-            message.chat.id,
-            msg.message_id
-        )
-
-        with open(new_name, "rb") as f:
+        with open(temp_file, "rb") as f:
             bot.send_document(
                 message.chat.id,
                 f,
-                caption=f"✅ Renamed successfully!\n\n📄 {new_name}"
+                caption=f"✅ Renamed successfully!\n📄 {new_name}"
             )
 
-        os.remove(new_name)
+        os.remove(temp_file)
         del user_files[user_id]
 
     except Exception as e:
+        if os.path.exists(temp_file):
+            os.remove(temp_file)
+
         bot.reply_to(message, f"❌ Error: {e}")
 
 
-print("🤖 Rename Bot is running...")
+@app.route("/", methods=["GET"])
+def home():
+    return "Rename Bot is running!"
 
-bot.infinity_polling()
+
+@app.route("/webhook", methods=["POST"])
+def webhook():
+    json_string = request.get_data().decode("utf-8")
+    update = telebot.types.Update.de_json(json_string)
+    bot.process_new_updates([update])
+    return "OK", 200
+
+
+def setup_webhook():
+    render_url = os.environ.get("RENDER_EXTERNAL_URL")
+
+    if render_url:
+        webhook_url = render_url + "/webhook"
+        bot.remove_webhook()
+        bot.set_webhook(url=webhook_url)
+
+
+if __name__ == "__main__":
+    setup_webhook()
+
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
