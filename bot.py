@@ -23,10 +23,9 @@ def start(message):
         message,
         "👋 Welcome!\n\n"
         "Mujhe koi video/file bhejo.\n"
-        "Uske baad naya filename bhejna.\n"
-        "Phir thumbnail photo bhejna.\n\n"
-        "Example:\n"
-        "movie.mp4"
+        "Uske baad naya filename bhejo.\n"
+        "Phir thumbnail photo bhejo.\n\n"
+        "Example: movie.mp4"
     )
 
 
@@ -36,9 +35,11 @@ def start(message):
 
 @bot.message_handler(content_types=["document"])
 def receive_file(message):
+
+    user_id = message.from_user.id
     file = message.document
 
-    user_files[message.from_user.id] = {
+    user_files[user_id] = {
         "file_id": file.file_id,
         "old_name": file.file_name
     }
@@ -53,7 +54,7 @@ def receive_file(message):
 
 
 # =========================
-# RECEIVE NEW FILENAME
+# RECEIVE FILENAME
 # =========================
 
 @bot.message_handler(
@@ -77,9 +78,9 @@ def receive_filename(message):
 
     bot.reply_to(
         message,
-        f"✅ New filename set:\n{new_name}\n\n"
-        f"🖼️ Ab thumbnail photo bhejo.\n"
-        f"Thumbnail nahi chahiye to /skip bhejo."
+        f"✅ Filename set:\n{new_name}\n\n"
+        "🖼️ Ab thumbnail photo bhejo.\n"
+        "Thumbnail nahi chahiye to /skip bhejo."
     )
 
 
@@ -95,7 +96,7 @@ def receive_thumbnail(message):
     if user_id not in user_files:
         bot.reply_to(
             message,
-            "❌ Pehle mujhe file/video bhejo."
+            "❌ Pehle file/video bhejo."
         )
         return
 
@@ -113,7 +114,7 @@ def receive_thumbnail(message):
 
     bot.reply_to(
         message,
-        "🖼️ Thumbnail received!\n\n"
+        "🖼️ Thumbnail received!\n"
         "⏳ Processing..."
     )
 
@@ -139,7 +140,7 @@ def skip_thumbnail(message):
     if "new_name" not in user_files[user_id]:
         bot.reply_to(
             message,
-            "❌ Pehle new filename bhejo."
+            "❌ Pehle filename bhejo."
         )
         return
 
@@ -159,14 +160,17 @@ def process_file(chat_id, user_id):
 
     file_info = user_files[user_id]
 
-    new_name = file_info["new_name"]
     file_id = file_info["file_id"]
+    new_name = file_info["new_name"]
 
     temp_file = f"/tmp/{user_id}_{new_name}"
+    thumbnail_file = None
 
     try:
 
         # Download original file
+        print("⬇️ Downloading file...")
+
         file_data = bot.get_file(file_id)
 
         downloaded_file = bot.download_file(
@@ -176,10 +180,15 @@ def process_file(chat_id, user_id):
         with open(temp_file, "wb") as f:
             f.write(downloaded_file)
 
-        # Thumbnail available?
-        thumbnail_file = None
+        print("✅ File downloaded")
+
+        # =========================
+        # DOWNLOAD THUMBNAIL
+        # =========================
 
         if user_id in user_thumbnails:
+
+            print("⬇️ Downloading thumbnail...")
 
             thumb_id = user_thumbnails[user_id]
 
@@ -194,8 +203,15 @@ def process_file(chat_id, user_id):
             with open(thumbnail_file, "wb") as f:
                 f.write(thumb_bytes)
 
-        # Send renamed file
-        with open(temp_file, "rb") as f:
+            print("✅ Thumbnail downloaded")
+
+        # =========================
+        # SEND FILE
+        # =========================
+
+        print("⬆️ Sending renamed file...")
+
+        with open(temp_file, "rb") as document:
 
             if thumbnail_file:
 
@@ -203,49 +219,55 @@ def process_file(chat_id, user_id):
 
                     bot.send_document(
                         chat_id,
-                        f,
-                        visible_file_name=new_name,
-                        thumbnail=thumb,
+                        document,
                         caption=(
-                            f"✅ Renamed successfully!\n\n"
+                            "✅ Renamed successfully!\n\n"
                             f"📄 {new_name}\n"
-                            f"🖼️ Custom thumbnail added"
-                        )
+                            "🖼️ Custom thumbnail added"
+                        ),
+                        visible_file_name=new_name,
+                        thumbnail=thumb
                     )
 
             else:
 
                 bot.send_document(
                     chat_id,
-                    f,
-                    visible_file_name=new_name,
+                    document,
                     caption=(
-                        f"✅ Renamed successfully!\n\n"
+                        "✅ Renamed successfully!\n\n"
                         f"📄 {new_name}"
-                    )
+                    ),
+                    visible_file_name=new_name
                 )
 
-        # Delete temporary files
+        print("🎉 FILE PROCESSING COMPLETE")
+
+        # =========================
+        # CLEANUP
+        # =========================
+
         if os.path.exists(temp_file):
             os.remove(temp_file)
 
         if thumbnail_file and os.path.exists(thumbnail_file):
             os.remove(thumbnail_file)
 
-        # Clear user data
-        del user_files[user_id]
+        if user_id in user_files:
+            del user_files[user_id]
 
         if user_id in user_thumbnails:
             del user_thumbnails[user_id]
 
-        print("✅ FILE PROCESSING COMPLETE")
-
     except Exception as e:
 
-        print("❌ ERROR:", e)
+        print("❌ ERROR:", repr(e))
 
         if os.path.exists(temp_file):
             os.remove(temp_file)
+
+        if thumbnail_file and os.path.exists(thumbnail_file):
+            os.remove(thumbnail_file)
 
         bot.send_message(
             chat_id,
@@ -269,6 +291,8 @@ def home():
 @app.route("/webhook", methods=["POST"])
 def webhook():
 
+    print("🔥 WEBHOOK HIT 🔥")
+
     json_string = request.get_data().decode("utf-8")
 
     update = telebot.types.Update.de_json(
@@ -286,9 +310,7 @@ def webhook():
 
 def setup_webhook():
 
-    render_url = os.environ.get(
-        "RENDER_EXTERNAL_URL"
-    )
+    render_url = os.environ.get("RENDER_EXTERNAL_URL")
 
     if render_url:
 
@@ -316,13 +338,10 @@ setup_webhook()
 if __name__ == "__main__":
 
     port = int(
-        os.environ.get(
-            "PORT",
-            10000
-        )
+        os.environ.get("PORT", 10000)
     )
 
     app.run(
         host="0.0.0.0",
         port=port
-        )
+    )
