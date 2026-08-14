@@ -77,29 +77,26 @@ def rename_file(message):
 
         bot.reply_to(message, f"❌ Error: {e}")
 
-
-@app.route("/", methods=["GET"])
-def home():
-    return "Rename Bot is running!", 200
 @app.route("/webhook", methods=["POST"])
 def webhook():
+    print("🔥🔥 WEBHOOK HIT 🔥🔥", flush=True)
+
     try:
-        json_string = request.get_data().decode("utf-8")
+        data = request.get_data().decode("utf-8")
+        print("TELEGRAM DATA:", data, flush=True)
 
-        print("🔥 TELEGRAM UPDATE RECEIVED")
-        print(json_string)
+        update = telebot.types.Update.de_json(data)
 
-        update = telebot.types.Update.de_json(json_string)
-
-        print("🔥 PROCESSING UPDATE")
+        print("PROCESSING UPDATE...", flush=True)
         bot.process_new_updates([update])
 
-        print("🔥 UPDATE PROCESSED")
+        print("UPDATE DONE", flush=True)
         return "OK", 200
 
     except Exception as e:
-        print("❌ WEBHOOK ERROR:", repr(e))
+        print("❌ WEBHOOK ERROR:", repr(e), flush=True)
         return "ERROR", 500
+        
 def setup_webhook():
     render_url = os.environ.get("RENDER_EXTERNAL_URL")
 
