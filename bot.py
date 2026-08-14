@@ -17,8 +17,7 @@ def start(message):
         message,
         "👋 Welcome!\n\n"
         "Mujhe koi document/file bhejo.\n"
-        "Uske baad naya filename bhejo.\n"
-        "Example: movie.mp4"
+        "Uske baad naya filename bhejna."
     )
 @bot.message_handler(content_types=["document"])
 def receive_file(message):
