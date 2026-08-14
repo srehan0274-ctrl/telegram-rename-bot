@@ -9,17 +9,17 @@ app = Flask(__name__)
 
 user_files = {}
 
-
 @bot.message_handler(commands=["start"])
 def start(message):
+    print("🔥 START HANDLER CALLED")
+
     bot.reply_to(
         message,
         "👋 Welcome!\n\n"
         "Mujhe koi document/file bhejo.\n"
-        "Uske baad naya filename bhejna."
+        "Uske baad naya filename bhejo.\n"
+        "Example: movie.mp4"
     )
-
-
 @bot.message_handler(content_types=["document"])
 def receive_file(message):
     file = message.document
