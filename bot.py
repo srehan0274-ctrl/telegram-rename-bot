@@ -1,11 +1,10 @@
 import os
-import threading
 from flask import Flask, request
 import telebot
 
 TOKEN = os.environ["BOT_TOKEN"]
 
-bot = telebot.TeleBot(TOKEN)
+bot = telebot.TeleBot(TOKEN, threaded=False)
 app = Flask(__name__)
 
 user_files = {}
@@ -39,18 +38,12 @@ def receive_file(message):
 
 
 @bot.message_handler(
-    func=lambda message: message.from_user.id in user_files
+    func=lambda message: message.from_user.id in user_files,
+    content_types=["text"]
 )
 def rename_file(message):
     user_id = message.from_user.id
-    new_name = message.text.strip()
-
-    if not new_name:
-        bot.reply_to(message, "❌ Filename empty nahi ho sakta.")
-        return
-
-    # Safe filename
-    new_name = os.path.basename(new_name)
+    new_name = os.path.basename(message.text.strip())
 
     if not new_name:
         bot.reply_to(message, "❌ Invalid filename.")
@@ -87,27 +80,42 @@ def rename_file(message):
 
 @app.route("/", methods=["GET"])
 def home():
-    return "Rename Bot is running!"
+    return "Rename Bot is running!", 200
 
 
 @app.route("/webhook", methods=["POST"])
 def webhook():
-    json_string = request.get_data().decode("utf-8")
-    update = telebot.types.Update.de_json(json_string)
-    bot.process_new_updates([update])
-    return "OK", 200
+    try:
+        json_string = request.get_data().decode("utf-8")
+        update = telebot.types.Update.de_json(json_string)
+        bot.process_new_updates([update])
+        return "OK", 200
+    except Exception as e:
+        print("WEBHOOK ERROR:", e)
+        return "ERROR", 500
 
 
 def setup_webhook():
     render_url = os.environ.get("RENDER_EXTERNAL_URL")
 
-    if render_url:
-        webhook_url = render_url + "/webhook"
+    if not render_url:
+        print("ERROR: RENDER_EXTERNAL_URL missing")
+        return
+
+    webhook_url = render_url.rstrip("/") + "/webhook"
+
+    print("Setting webhook:", webhook_url)
+
+    try:
         bot.remove_webhook()
         bot.set_webhook(url=webhook_url)
+        print("WEBHOOK SET SUCCESSFULLY")
+    except Exception as e:
+        print("WEBHOOK ERROR:", e)
 
 
 setup_webhook()
+
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
